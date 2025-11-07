@@ -42,6 +42,7 @@ Jobs are scored with a hybrid pipeline:
 - Inline job cards: \[View\] \[👍 Like\] \[👎 Dislike\]
  - `/start` or `/help` → register user (if new) or resend the quick-start menu
 - `/more` → 2--3 instant recommendations
+- `/search <keywords>` → ad-hoc query for jobs matching the supplied terms (ignores the adaptive profile)
 - `/keywords` → shows current Top 8 keywords
 - `/prefs` → user filter preferences (optional)
 - `/set_time` → set preferred daily notification time in 30-minute slots (09:00, 09:30, …; default: 09:00 SGT)
