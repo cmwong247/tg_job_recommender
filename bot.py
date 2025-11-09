@@ -5,7 +5,7 @@ import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, 
-    ContextTypes, MessageHandler, filters
+    ContextTypes, MessageHandler, filters, ConversationHandler
 )
 from telegram.constants import ParseMode
 import config
@@ -19,6 +19,9 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Conversation states
+WAITING_FOR_SEARCH_QUERY, WAITING_FOR_TIME = range(2)
 
 
 class JobBot:
@@ -90,17 +93,18 @@ class JobBot:
         existing = self.db.get_user(user.id)
         if not existing:
             self.db.create_user(user.id, user.username)
+        
         welcome_msg = (
             f"👋 Welcome to Job Bot, {user.first_name}!\n\n"
             "I'll help you find personalized job recommendations based on your preferences.\n\n"
             "<b>How it works:</b>\n"
-            "• Use /search (keywords) to get some jobs\n"
+            "• Use /search to find specific jobs\n"
             "• Like 👍 or dislike 👎 each job to help refine recommendations\n"
             "• I'll learn what you like and improve over time!\n\n"
             "📢 <b>Notifications:</b> Daily digest notifications are enabled by default. Use /toggle_notifications to turn them off.\n\n"
             "📝 <b>Available Commands:</b>\n"
             "/more - Get 2-3 personalized recommendations (use multiple times)\n"
-            "/search (keywords) - Search for specific jobs\n"
+            "/search - Search for specific jobs\n"
             "/keywords - View your keyword profile\n"
             "/set_time - Set notification time\n"
             "/toggle_notifications - Turn daily digest on/off\n"
@@ -116,10 +120,10 @@ class JobBot:
             "🤖 *Job Bot Commands*\n\n"
             "📋 *Job Discovery:*\n"
             "/more - Get 2-3 personalized recommendations\n"
-            "/search <query> - Search for specific jobs\n\n"
+            "/search - Search for specific jobs\n\n"
             "⚙️ *Profile & Settings:*\n"
             "/keywords - View your adaptive keywords\n"
-            "/set_time <HH:MM> - Set daily notification time (30-min slots)\n"
+            "/set_time - Set daily notification time (30-min slots)\n"
             "/toggle_notifications - Turn daily digest on/off\n\n"
             "❓ *Other:*\n"
             "/help - Show this help message\n"
@@ -223,18 +227,28 @@ class JobBot:
             )
     
     async def search_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /search command - ad-hoc search."""
+        """Handle /search command - start search conversation."""
+        await update.message.reply_text(
+            "🔍 *Search for Jobs*\n\n"
+            "Please send me the keywords you want to search for.\n\n"
+            "Example: `data analyst python`\n"
+            "Example: `software engineer java`\n\n"
+            "Send /cancel to cancel the search.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return WAITING_FOR_SEARCH_QUERY
+    
+    async def process_search_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Process the search query from user."""
         user_id = update.effective_user.id
-        
-        # Get search query
-        query = ' '.join(context.args) if context.args else ''
+        query = update.message.text.strip()
         
         if not query:
             await update.message.reply_text(
-                "Please provide search keywords.\nExample: `/search data analyst python`",
+                "❌ Please provide search keywords or send /cancel to cancel.",
                 parse_mode=ParseMode.MARKDOWN
             )
-            return
+            return WAITING_FOR_SEARCH_QUERY
         
         await update.message.reply_text(f"🔍 Searching for: *{query}*...", parse_mode=ParseMode.MARKDOWN)
         
@@ -246,7 +260,7 @@ class JobBot:
                 f"😕 No jobs found for '{query}'. Try different keywords.",
                 parse_mode=ParseMode.MARKDOWN
             )
-            return
+            return ConversationHandler.END
         
         # Send top 5 results
         count = min(len(jobs), 5)
@@ -268,6 +282,8 @@ class JobBot:
                 reply_markup=keyboard,
                 parse_mode=ParseMode.MARKDOWN
             )
+        
+        return ConversationHandler.END
     
     async def keywords_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /keywords command - show user profile."""
@@ -277,22 +293,24 @@ class JobBot:
         await update.message.reply_text(display, parse_mode=ParseMode.MARKDOWN)
     
     async def set_time_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handle /set_time command."""
+        """Handle /set_time command - start time setting conversation."""
+        await update.message.reply_text(
+            "⏰ *Set Your Notification Time*\n\n"
+            "Please send me your preferred notification time in *HH:MM* format.\n"
+            "Time must be in 30-minute slots (e.g., 09:00, 09:30, 10:00)\n\n"
+            "Examples:\n"
+            "• `09:00`\n"
+            "• `18:30`\n"
+            "• `21:00`\n\n"
+            "Send /cancel to cancel.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return WAITING_FOR_TIME
+    
+    async def process_time_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Process the time input from user."""
         user_id = update.effective_user.id
-        
-        if not context.args:
-            await update.message.reply_text(
-                "⏰ *Set Your Notification Time*\n\n"
-                "Usage: `/set_time HH:MM`\n"
-                "Time must be in 30-minute slots (e.g., 09:00, 09:30, 10:00)\n\n"
-                "Examples:\n"
-                "`/set_time 09:00`\n"
-                "`/set_time 18:30`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-        
-        time_str = context.args[0]
+        time_str = update.message.text.strip()
         
         # Validate format
         try:
@@ -301,10 +319,12 @@ class JobBot:
                 raise ValueError()
         except:
             await update.message.reply_text(
-                "❌ Invalid time format. Use HH:MM with 30-minute slots (e.g., 09:00, 09:30).",
+                "❌ Invalid time format. Please use HH:MM with 30-minute slots.\n\n"
+                "Examples: `09:00`, `09:30`, `18:00`\n\n"
+                "Send /cancel to cancel.",
                 parse_mode=ParseMode.MARKDOWN
             )
-            return
+            return WAITING_FOR_TIME
         
         # Update user
         self.db.set_notification_time(user_id, time_str)
@@ -313,6 +333,15 @@ class JobBot:
             f"✅ Daily digest time set to *{time_str}* (Singapore Time)",
             parse_mode=ParseMode.MARKDOWN
         )
+        return ConversationHandler.END
+    
+    async def cancel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /cancel command."""
+        await update.message.reply_text(
+            "❌ Operation cancelled.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return ConversationHandler.END
     
     async def toggle_notifications_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /toggle_notifications command."""
@@ -403,12 +432,36 @@ class JobBot:
         
         application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).post_init(set_commands).build()
         
-        # Command handlers
+        # Conversation handler for /search
+        search_handler = ConversationHandler(
+            entry_points=[CommandHandler("search", self.search_command)],
+            states={
+                WAITING_FOR_SEARCH_QUERY: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_search_query)
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel_command)],
+        )
+        
+        # Conversation handler for /set_time
+        set_time_handler = ConversationHandler(
+            entry_points=[CommandHandler("set_time", self.set_time_command)],
+            states={
+                WAITING_FOR_TIME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.process_time_input)
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", self.cancel_command)],
+        )
+        
+        # Add conversation handlers
+        application.add_handler(search_handler)
+        application.add_handler(set_time_handler)
+        
+        # Other command handlers
         application.add_handler(CommandHandler("start", self.start_command))
         application.add_handler(CommandHandler("more", self.more_command))
-        application.add_handler(CommandHandler("search", self.search_command))
         application.add_handler(CommandHandler("keywords", self.keywords_command))
-        application.add_handler(CommandHandler("set_time", self.set_time_command))
         application.add_handler(CommandHandler("toggle_notifications", self.toggle_notifications_command))
         application.add_handler(CommandHandler("help", self.help_command))
         
