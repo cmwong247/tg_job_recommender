@@ -27,11 +27,13 @@ class DigestScheduler:
         try:
             # Get user keywords
             keywords = self.db.get_user_keywords(user_id, top_k=config.TOP_K)
+            # For notifications use only the top-weighted positive keyword
             keyword_list = [kw['keyword'] for kw in keywords if not kw['is_negative']]
+            top_keyword = keyword_list[0:1]  # slice to keep list shape
             
             # Fetch jobs
-            if keyword_list:
-                jobs = self.adzuna.search_by_keywords(keyword_list, limit=50)
+            if top_keyword:
+                jobs = self.adzuna.search_by_keywords(top_keyword, limit=50)
             else:
                 jobs = self.adzuna.get_recent_jobs(limit=50)
             
