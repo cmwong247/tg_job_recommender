@@ -16,5 +16,5 @@ EXPOSE 8080
 # Set environment variable for Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
-# Run the bot in webhook mode
-CMD ["python", "main.py", "webhook", "8080"]
+# Run combined webhook + digest cron server
+CMD ["python", "main.py", "serve", "8080"]
