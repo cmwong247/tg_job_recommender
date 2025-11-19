@@ -96,7 +96,9 @@ def run_server(port: int = 8080):
     
     app = web.Application()
     app.router.add_post("/webhook", telegram_webhook)
+    # Allow both POST (preferred) and GET (cron defaults) for digest trigger
     app.router.add_post("/digest-cron", digest_cron)
+    app.router.add_get("/digest-cron", digest_cron)
     app.on_startup.append(on_startup)
     app.on_cleanup.append(on_cleanup)
     
