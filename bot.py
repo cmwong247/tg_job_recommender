@@ -296,7 +296,7 @@ class JobBot:
         """Handle /set_time command - start time setting conversation."""
         await update.message.reply_text(
             "⏰ *Set Your Notification Time*\n\n"
-            "Please send me your preferred notification time in *HH:MM* format.\n"
+            "Please send me your preferred notification time in *HH24:MM* (24-hour) format.\n"
             "Any minute value is allowed (e.g., 09:00, 09:17, 10:45)\n\n"
             "Examples:\n"
             "• `09:00`\n"
@@ -319,7 +319,7 @@ class JobBot:
                 raise ValueError()
         except:
             await update.message.reply_text(
-                "❌ Invalid time format. Please use HH:MM (00-23 for hours, 00-59 for minutes).\n\n"
+                "❌ Invalid time format. Please use HH24:MM (00-23 for hours, 00-59 for minutes).\n\n"
                 "Examples: `09:00`, `09:17`, `18:45`\n\n"
                 "Send /cancel to cancel.",
                 parse_mode=ParseMode.MARKDOWN
